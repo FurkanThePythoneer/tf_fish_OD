@@ -111,7 +111,7 @@ for epoch in range(NUM_EPOCHS):
         ##optimizer.zero_grad()
         ##losses.backward()
         ##optimizer.step()
-		scaler.scale(loss).backward()
+        scaler.scale(losses).backward()
         scaler.step(optimizer)
         scaler.update()
     
