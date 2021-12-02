@@ -433,7 +433,7 @@ class MyModel(nn.Module):
     ):
         super(MyModel, self).__init__()
         self.in_features = in_features
-        self.double
+        
         if model_pretrained_path is None:
             if backbone_pretrained_path is None:
                 model = PretrainModel(
