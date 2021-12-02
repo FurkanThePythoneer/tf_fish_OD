@@ -53,8 +53,8 @@ def prepare_dataset():
 
 
 
-	dl_train = DataLoader(ds_train, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn)
-	dl_val = DataLoader(ds_valid, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn)
+	dl_train = DataLoader(ds_train, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
+	dl_val = DataLoader(ds_valid, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
 
 
 	return dl_train, dl_val
