@@ -86,8 +86,10 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_EPOCHS-1)
 n_batches, n_batches_val = len(dl_train), len(dl_val)
 validation_losses = []
 
+scaler = torch.cuda.amp.GradScaler()
 
 for epoch in range(NUM_EPOCHS):
+    model.train()
     time_start = time.time()
     loss_accum = 0
     
@@ -95,19 +97,23 @@ for epoch in range(NUM_EPOCHS):
         
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        optimizer.zero_grad()
 
         # Predict
-        loss_dict = model(images, targets)
-        losses = sum(loss for loss in loss_dict.values())
-        loss_value = losses.item()
+        with torch.cuda.amp.autocast():
+        	loss_dict = model(images, targets)
+        	losses = sum(loss for loss in loss_dict.values())
+        	loss_value = losses.item()
 
-        loss_accum += loss_value
+        	loss_accum += loss_value
 
         # Back-prop
-        optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
-
+        ##optimizer.zero_grad()
+        ##losses.backward()
+        ##optimizer.step()
+		scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
     
     # update the learning rate
     if lr_scheduler is not None:
@@ -116,7 +122,7 @@ for epoch in range(NUM_EPOCHS):
     # Validation 
     val_loss_accum = 0
         
-    with torch.no_grad():
+    with torch.cuda.amp.autocast(), torch.no_grad():
         for batch_idx, (images, targets) in enumerate(dl_val, 1):
             images = list(image.to(device) for image in images)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
