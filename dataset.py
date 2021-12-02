@@ -87,7 +87,7 @@ class FishDataset(Dataset):
 
 def get_train_transform(image_sizes: list = [512,512]):
     return albu.Compose([
-        albu.RandomResizedCrop(height=image_size[0], width=image_sizes[1], scale=(0.25, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=1, p=1.0),
+        albu.RandomResizedCrop(height=image_sizes[0], width=image_sizes[1], scale=(0.25, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=1, p=1.0),
         albu.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=30, interpolation=1, border_mode=0, value=0, p=0.25),
         albu.HorizontalFlip(p=0.5),
         albu.VerticalFlip(p=0.5),
