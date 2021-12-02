@@ -75,7 +75,7 @@ class FishDataset(Dataset):
             image = sample['image']
             
             #if n_boxes > 0:
-            if len(sample['bboces']) > 0:
+            if len(sample['bboxes']) > 0:
                 #print(len(sample['bboxes']))
                 target['boxes'] = torch.stack(tuple(map(torch.tensor, zip(*sample['bboxes'])))).permute(1, 0)
         else:
