@@ -46,7 +46,7 @@ def prepare_dataset():
 	df_val = df_val[df_val.annotations.str.len() > 0 ].reset_index(drop=True)
 
 	ds_train = FishDataset(df_train, get_train_transform)
-	ds_valid = FishDataset(df_valid, get_valid_transform)
+	ds_valid = FishDataset(df_val, get_valid_transform)
 
 
 
