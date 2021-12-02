@@ -16,6 +16,9 @@ from models import MyModel
 from dataset import FishDataset, get_train_transform, get_valid_transform
 from madgrad import MADGRAD
 
+
+
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 NUM_EPOCHS = 20
 
