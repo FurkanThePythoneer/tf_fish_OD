@@ -93,8 +93,8 @@ for epoch in range(NUM_EPOCHS):
     
     for batch_idx, (images, targets) in enumerate(dl_train, 1):
         
-        images = list(image.to(DEVICE) for image in images)
-        targets = [{k: v.to(DEVICE) for k, v in t.items()} for t in targets]
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
         # Predict
         loss_dict = model(images, targets)
@@ -118,8 +118,8 @@ for epoch in range(NUM_EPOCHS):
         
     with torch.no_grad():
         for batch_idx, (images, targets) in enumerate(dl_val, 1):
-            images = list(image.to(DEVICE) for image in images)
-            targets = [{k: v.to(DEVICE) for k, v in t.items()} for t in targets]
+            images = list(image.to(device) for image in images)
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
             
             val_loss_dict = model(images, targets)
             val_batch_loss = sum(loss for loss in val_loss_dict.values())
