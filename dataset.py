@@ -40,8 +40,8 @@ class FishDataset(Dataset):
     
     def get_image(self, row):
         """Gets the image for a given row"""
-        
-        image = cv2.imread(f'{BASE_DIR}/{row["image_path"]}', cv2.IMREAD_COLOR)
+
+        image = cv2.imread(f'/kaggle/input/tensorflow-great-barrier-reef/train_images/{row["image_path"]}', cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
         image /= 255.0
         return image
