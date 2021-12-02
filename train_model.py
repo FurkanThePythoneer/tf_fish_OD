@@ -101,7 +101,7 @@ for epoch in range(NUM_EPOCHS):
 
         # Predict
         with torch.cuda.amp.autocast():
-        	loss_dict = model(images.float(), targets.float())
+        	loss_dict = model(images, targets)
         	losses = sum(loss for loss in loss_dict.values())
         	loss_value = losses.item()
 
