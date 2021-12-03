@@ -98,12 +98,12 @@ def get_train_transform(image_sizes: list = [512,512]):
             albu.MedianBlur(blur_limit=3, p=0.1),
             albu.Blur(blur_limit=3, p=0.1),
         ], p=0.25),
-        albu.OneOf([
-            albu.CLAHE(clip_limit=2),
-            albu.IAASharpen(),
-            albu.IAAEmboss(),
-            albu.RandomBrightnessContrast(),            
-        ], p=0.25),
+        #albu.OneOf([
+        #    albu.CLAHE(clip_limit=2),
+        #    albu.IAASharpen(),
+        #    albu.IAAEmboss(),
+        #    albu.RandomBrightnessContrast(),            
+        #], p=0.25),
         #albu.Cutout(num_holes=8, max_h_size=32, max_w_size=32, fill_value=0, p=0.25),
         #albu.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
         ToTensorV2(p=1.0)
