@@ -96,7 +96,7 @@ for epoch in range(NUM_EPOCHS):
     for batch_idx, (images, targets) in enumerate(dl_train, 1):
         
         images = list(image.float().to(device) for image in images)
-        targets = [{k: v.float().to(device) for k, v in t.items()} for t in targets]
+        targets = [{k: v.float().long().to(device) for k, v in t.items()} for t in targets]
         optimizer.zero_grad()
 
         # Predict
