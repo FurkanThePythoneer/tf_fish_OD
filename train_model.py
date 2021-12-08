@@ -95,6 +95,8 @@ validation_losses = []
 
 ema_val_map_max = 0
 
+DEVICE = device
+
 for epoch in range(NUM_EPOCHS):
     step = 0
     
@@ -137,8 +139,8 @@ for epoch in range(NUM_EPOCHS):
     eval_metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=1)
 
     for batch_idx, (images, targets) in enumerate(dl_val, 1):
-        images = list(image.float().to(DEVICE) for image in images)
-        targets = [{k: v.to(torch.float32).to(DEVICE) if "box" in k else v.to(DEVICE) for k, v in t.items()} for t in targets]
+        images = list(image.float().to(device) for image in images)
+        targets = [{k: v.to(torch.float32).to(device) if "box" in k else v.to(device) for k, v in t.items()} for t in targets]
 
         with torch.cuda.amp.autocast(), torch.no_grad():
             det_outputs = model(images, targets)
