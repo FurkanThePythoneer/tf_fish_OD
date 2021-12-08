@@ -126,7 +126,7 @@ for epoch in range(NUM_EPOCHS):
 
         step += 1
         if step % 100 == 0:
-            print('Step: [{}] | Loss: [{}] | LR: [{}]'.format(step, losses, optimizer.param_groups[0]['lr']))
+            print('Step: [{}] | Loss: [{}] | LR: [{}]'.format(step, loss, optimizer.param_groups[0]['lr']))
     
     train_loss = np.mean(train_loss)
     model.eval()
