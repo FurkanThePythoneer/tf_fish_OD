@@ -386,6 +386,12 @@ class PretrainModel(nn.Module):
             if backbone_name == 'resnet200d' or backbone_name == 'seresnet152d' or backbone_name == 'resnet101d':
                 self.backbone = timm.create_model(backbone_name, pretrained=imagenet_pretrained, num_classes=0)
                 self.backbone.inplanes = 2048
+        
+            # out of order
+            elif 'efficientnet_b' in backbone_name:
+                self.backbone = timm.create_model(backbone_name, pretrained=imagenet_pretrained, num_classes=0)
+                self.backbone.inplanes = 1000
+
         else:
             print('Load pretrain: {}'.format(backbone_pretrained_path))
             model = PretrainModel(
@@ -509,7 +515,7 @@ if __name__ == '__main__':
     def check_net():
         # usage:
         model = MyModel(
-            backbone_name="resnet101d",
+            backbone_name="efficientnet_b0",
             imagenet_pretrained=False,
             num_classes=2,
             in_features=2048,

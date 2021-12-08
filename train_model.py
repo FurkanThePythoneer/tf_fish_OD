@@ -13,8 +13,12 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader, Dataset
 from models import MyModel
+from timm.utils.model_ema import ModelEmaV2
+
 from dataset import FishDataset, get_train_transform, get_valid_transform
 from madgrad import MADGRAD
+
+from mean_average_precision import MetricBuilder
 
 
 
@@ -30,122 +34,139 @@ def seed_everything(seed=123):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
-
-def collate_fn(batch):
-   	return tuple(zip(*batch))
-
-def prepare_dataset():
-	df = pd.read_csv("/kaggle/input/reef-cv-strategy-subsequences-dataframes/train-validation-split/train-0.1.csv")
-
-	# Turn annotations from strings into lists of dictionaries
-	df['annotations'] = df['annotations'].apply(eval)
-
-	# Create the image path for the row
-	df['image_path'] = "video_" + df['video_id'].astype(str) + "/" + df['video_frame'].astype(str) + ".jpg"
-
-	df_train, df_val = df[df['is_train']], df[~df['is_train']]
-
-	df_train = df_train[df_train.annotations.str.len() > 0 ].reset_index(drop=True)
-	df_val = df_val[df_val.annotations.str.len() > 0 ].reset_index(drop=True)
-
-	ds_train = FishDataset(df_train, get_train_transform(image_sizes=[512,512]))
-	ds_valid = FishDataset(df_val, get_valid_transform(image_sizes=[512,512]))
-
-
-
-	dl_train = DataLoader(ds_train, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
-	dl_val = DataLoader(ds_valid, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
-
-
-	return dl_train, dl_val
-
+    print('Done seeding...')
 seed_everything(42)
 
-def get_model():
-    model = MyModel(
-    	backbone_name="resnet101d",
-    	imagenet_pretrained=False,
-    	num_classes=2,
-    	in_features=2048,
-    	backbone_pretrained_path=None, 
-    	backbone_pretrained_cls_num_classes=None,
-    	model_pretrained_path=None,
-    	model_pretrained_cls_num_classes=2)
-    return model.to(device)
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+def prepare_dataset():
+    df = pd.read_csv("/kaggle/input/reef-cv-strategy-subsequences-dataframes/train-validation-split/train-0.1.csv")
+
+    # Turn annotations from strings into lists of dictionaries
+    df['annotations'] = df['annotations'].apply(eval)
+
+    # Create the image path for the row
+    df['image_path'] = "video_" + df['video_id'].astype(str) + "/" + df['video_frame'].astype(str) + ".jpg"
+
+    df_train, df_val = df[df['is_train']], df[~df['is_train']]
+
+    df_train = df_train[df_train.annotations.str.len() > 0 ].reset_index(drop=True)
+    df_val = df_val[df_val.annotations.str.len() > 0 ].reset_index(drop=True)
+
+    ds_train = FishDataset(df_train, get_train_transform(image_sizes=[512,512]))
+    ds_valid = FishDataset(df_val, get_valid_transform(image_sizes=[512,512]))
+
+
+
+    dl_train = DataLoader(ds_train, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
+    dl_val = DataLoader(ds_valid, batch_size=8, shuffle=False, num_workers=2, collate_fn=collate_fn)
+
+
+    return dl_train, dl_val
+# ---
+
 
 dl_train, dl_val = prepare_dataset()
-model = get_model()
+
+model = MyModel(
+    backbone_name="resnet101d",
+    imagenet_pretrained=False,
+    num_classes=2,
+    in_features=2048,
+    backbone_pretrained_path=None, 
+    backbone_pretrained_cls_num_classes=None,
+    model_pretrained_path=None,
+    model_pretrained_cls_num_classes=2)
+
+model_ema = ModelEmaV2(model, decay=0.997, device=device)
+model.to(device)
 
 
-
-params = [p for p in model.parameters() if p.requires_grad]
-optimizer = MADGRAD(params, lr=3e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_EPOCHS-1)
 
+scaler = torch.cuda.amp.GradScaler()
 
 n_batches, n_batches_val = len(dl_train), len(dl_val)
 validation_losses = []
 
-scaler = torch.cuda.amp.GradScaler()
+
+ema_val_map_max = 0
 
 for epoch in range(NUM_EPOCHS):
+    step = 0
+    
     model.train()
+    scheduler.step()
+
     time_start = time.time()
     loss_accum = 0
+    train_loss = []
     
     for batch_idx, (images, targets) in enumerate(dl_train, 1):
         
         images = list(image.float().to(device) for image in images)
         targets = [{k: v.to(torch.float32).to(device) if "box" in k else v.to(device) for k, v in t.items()} for t in targets]
+        
         optimizer.zero_grad()
 
-        # Predict
+
         with torch.cuda.amp.autocast():
-        	loss_dict = model(images, targets)
-        	losses = sum(loss for loss in loss_dict.values())
-        	loss_value = losses.item()
+            det_loss_dict = model(images, targets)
+            loss = sum(l for l in det_loss_dict.values())
+            train_loss.append(loss.item())
 
-        	loss_accum += loss_value
-
-        # Back-prop
-        ##optimizer.zero_grad()
-        ##losses.backward()
-        ##optimizer.step()
-        scaler.scale(losses).backward()
+        scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
-    
-    # update the learning rate
-    if lr_scheduler is not None:
-        lr_scheduler.step()
 
-    # Validation 
-    val_loss_accum = 0
-        
-    with torch.cuda.amp.autocast(), torch.no_grad():
-        for batch_idx, (images, targets) in enumerate(dl_val, 1):
-            images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            
-            val_loss_dict = model(images, targets)
-            val_batch_loss = sum(loss for loss in val_loss_dict.values())
-            val_loss_accum += val_batch_loss.item()
+        model_ema.update(model)
+
+        step += 1
+        if step % 100 == 0:
+            print('Step: [{}] | Loss: [{}] | LR: [{}]'.format(step, losses, optimizer.param_groups[0]['lr']))
     
-    # Logging
-    val_loss = val_loss_accum / n_batches_val
-    train_loss = loss_accum / n_batches
-    validation_losses.append(val_loss)
-    
-    # Save model
-    chk_name = f'fasterrcnn_resnet101d-e{epoch}.bin'
-    torch.save(model.state_dict(), chk_name)
-    
-    
-    elapsed = time.time() - time_start
-    
-    print(f"[Epoch {epoch+1:2d} / {NUM_EPOCHS:2d}] Train loss: {train_loss:.3f}. Val loss: {val_loss:.3f} --> {chk_name}  [{elapsed:.0f} secs]")   
+    train_loss = np.mean(train_loss)
+    model.eval()
+    model_ema.eval()
 
 
+    metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=1)
+    eval_metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=1)
 
+    for batch_idx, (images, targets) in enumerate(dl_val, 1):
+        images = list(image.float().to(DEVICE) for image in images)
+        targets = [{k: v.to(torch.float32).to(DEVICE) if "box" in k else v.to(DEVICE) for k, v in t.items()} for t in targets]
 
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            det_outputs = model(images, targets)
+            ema_det_outputs = model_ema.module(images, targets)
+
+            for t, d, ed in zip(targets, det_outputs, ema_det_outputs):
+                gt_boxes = t['boxes'].data.cpu().numpy()
+                gt_boxes = np.hstack((gt_boxes, np.zeros((gt_boxes.shape[0], 3), dtype=gt_boxes.dtype)))
+
+                det_boxes = d['boxes'].data.cpu().numpy()
+                det_scores = d['scores'].data.cpu().numpy()
+                det_scores = det_scores.reshape(det_scores.shape[0], 1)
+                det_pred = np.hstack((det_boxes, np.zeros((det_boxes.shape[0], 1), dtype=det_boxes.dtype), det_scores))
+                metric_fn.add(det_pred, gt_boxes)
+
+                ema_det_boxes = ed['boxes'].data.cpu().numpy()
+                ema_det_scores = ed['scores'].data.cpu().numpy()
+                ema_det_scores = ema_det_scores.reshape(ema_det_scores.shape[0], 1)
+                ema_det_pred = np.hstack((ema_det_boxes, np.zeros((ema_det_boxes.shape[0], 1), dtype=ema_det_boxes.dtype), ema_det_scores))
+                eval_metric_fn.add(ema_det_pred, gt_boxes)
+
+    val_map = metric_fn.value(iou_thresholds=0.5, recall_thresholds=np.arange(0., 1.1, 0.1), mpolicy='soft')['mAP']
+    ema_val_map = eval_metric_fn.value(iou_thresholds=0.5, recall_thresholds=np.arange(0., 1.1, 0.1), mpolicy='soft')['mAP']
+
+    print('train loss: {:.5f} | val_map: {:.5f} | ema_val_map: {:.5f}'.format(train_loss, val_map, ema_val_map))
+    
+    if ema_val_map > ema_val_map_max:
+        print("Ema val map improved from [{}] to [{}] - Saving model.".format(ema_val_map_max, ema_val_map))
+        ema_val_map_max = ema_val_map
+        torch.save(model_ema.module.state_dict(), "fasterrccn.pth")
 
